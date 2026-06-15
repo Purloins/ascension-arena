@@ -1,6 +1,6 @@
 "use client";
 // src/app/mappool/MappoolViewer.tsx
-// Public viewer — tabs per round, maps ordered by slot number, grouped by mod.
+// Public viewer — tabs per round, all maps in slot number order, no mod grouping.
 
 import { useState } from "react";
 
@@ -34,13 +34,21 @@ interface Round {
   available: boolean;
 }
 
+// NM and DT swapped per request
 const MOD_COLORS: Record<string, string> = {
-  NM:"#a78bfa", HD:"#fbbf24", HR:"#f87171", DT:"#60a5fa",
-  FM:"#34d399", RX:"#f472b6", AP:"#c084fc", EZ:"#86efac",
-  EZHD:"#fde68a", EZDT:"#93c5fd", HDDTHR:"#fb923c", TB:"#e2e8f0",
+  NM:     "#60a5fa", // was DT blue, now NM
+  HD:     "#fbbf24",
+  HR:     "#f87171",
+  DT:     "#a78bfa", // was NM purple, now DT
+  FM:     "#34d399",
+  RX:     "#f472b6",
+  AP:     "#c084fc",
+  EZ:     "#86efac",
+  EZHD:   "#fde68a",
+  EZDT:   "#93c5fd",
+  HDDTHR: "#fb923c",
+  TB:     "#e2e8f0",
 };
-
-const MOD_ORDER = ["NM","HD","HR","DT","FM","RX","AP","EZ","EZHD","EZDT","HDDTHR","TB"];
 
 function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, "0")}`;
@@ -123,12 +131,11 @@ function MapCard({ map, roundLetter }: { map: MappoolMap; roundLetter: string })
           <div style={{ fontSize: "0.74rem", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 12 }}>
             {map.version} · mapped by {map.mapper}
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-            <StatPill label="BPM"    value={map.bpm.toFixed(0)} />
-            <StatPill label="Drain"  value={formatTime(map.drainLength)} />
-            <StatPill label="CS"     value={map.cs.toFixed(1)} />
-            <StatPill label="AR"     value={map.ar.toFixed(1)} />
+            <StatPill label="BPM"   value={map.bpm.toFixed(0)} />
+            <StatPill label="Drain" value={formatTime(map.drainLength)} />
+            <StatPill label="CS"    value={map.cs.toFixed(1)} />
+            <StatPill label="AR"    value={map.ar.toFixed(1)} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginTop: 6 }}>
             <StatPill label="OD" value={map.od.toFixed(1)} />
@@ -137,22 +144,6 @@ function MapCard({ map, roundLetter }: { map: MappoolMap; roundLetter: string })
         </div>
       </div>
     </a>
-  );
-}
-
-function ModGroup({ mod, maps, roundLetter }: { mod: string; maps: MappoolMap[]; roundLetter: string }) {
-  const color = MOD_COLORS[mod] ?? "#a78bfa";
-  return (
-    <div style={{ marginBottom: 36 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}`, flexShrink: 0 }} />
-        <span style={{ fontFamily: "Cinzel, serif", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color }}>{mod}</span>
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
-        {maps.map((m) => <MapCard key={m.id} map={m} roundLetter={roundLetter} />)}
-      </div>
-    </div>
   );
 }
 
@@ -168,11 +159,8 @@ export default function MappoolViewer({
 
   const currentPool = pools[activeRound];
   const currentRound = rounds.find((r) => r.key === activeRound);
-
-  // Group by mod
-  const byMod: Record<string, MappoolMap[]> = {};
-  currentPool?.maps.forEach((m) => { (byMod[m.mod] ??= []).push(m); });
-  const orderedMods = MOD_ORDER.filter((m) => byMod[m]);
+  // Already ordered by slotNumber from the DB query
+  const maps = currentPool?.maps ?? [];
 
   return (
     <div>
@@ -198,12 +186,18 @@ export default function MappoolViewer({
         ))}
       </div>
 
-      {/* Maps */}
+      {/* Maps — flat grid, slot number order */}
       <div className="page-section" style={{ paddingTop: 40 }}>
-        {currentPool && orderedMods.length > 0 ? (
-          orderedMods.map((mod) => (
-            <ModGroup key={mod} mod={mod} maps={byMod[mod]} roundLetter={currentRound?.letter ?? ""} />
-          ))
+        {maps.length > 0 ? (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: 14,
+          }}>
+            {maps.map((m) => (
+              <MapCard key={m.id} map={m} roundLetter={currentRound?.letter ?? ""} />
+            ))}
+          </div>
         ) : (
           <div style={{ textAlign: "center", padding: "48px 0", fontFamily: "Cinzel, serif", fontSize: "0.8rem", color: "var(--muted)", letterSpacing: "0.1em" }}>
             No maps in this pool yet.

@@ -14,7 +14,7 @@ const ROUNDS = [
 const MODS = ["NM","HD","HR","DT","FM","RX","AP","EZ","EZHD","EZDT","HDDTHR","TB"];
 
 const MOD_COLORS: Record<string, string> = {
-  NM:"#a78bfa", HD:"#fbbf24", HR:"#f87171", DT:"#60a5fa",
+  NM:"#60a5fa", HD:"#fbbf24", HR:"#f87171", DT:"#a78bfa",
   FM:"#34d399", RX:"#f472b6", AP:"#c084fc", EZ:"#86efac",
   EZHD:"#fde68a", EZDT:"#93c5fd", HDDTHR:"#fb923c", TB:"#e2e8f0",
 };
