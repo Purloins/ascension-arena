@@ -148,7 +148,7 @@ export default function Nav({
 }) {
   return (
     <nav>
-      <a href="/" className="logo">Ascension Arena</a>
+      <a href="/" className="logo">TWIST</a>
       <ul className="nav-links">
         <li><a href="/#registration">Register</a></li>
         <li><a href="/mappool">Mappool</a></li>

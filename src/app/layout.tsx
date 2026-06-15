@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
-  title: "Ascension Arena — osu! LAN Tournament",
+  title: "The World of Interstellar Seismic Tales — osu! LAN Tournament",
   description: "A first-of-its-kind osu! LAN tournament with an element system, HP-based scoring, and a live team formation mechanic. November 2026.",
 };
 

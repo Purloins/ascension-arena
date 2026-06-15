@@ -30,7 +30,7 @@ export default async function Home() {
             <div className="hero-tag-dot" />
             LAN Confirmed — November 2026
           </div>
-          <h1 className="hero-title">Ascension<br /><em>Arena</em></h1>
+          <h1 className="hero-title">TWIST<br /><em style={{ fontSize: "0.38em", letterSpacing: "0.06em", lineHeight: 1.4, display: "block", marginTop: 8 }}>The World of Interstellar Seismic Tales</em></h1>
           <p className="hero-desc">
             An osu! team tournament unlike anything that&apos;s been run before.
             Your element is randomly assigned. Your team is formed around it.
@@ -366,7 +366,7 @@ export default async function Home() {
       {/* FOOTER */}
       <footer>
         <div>
-          <div className="footer-brand">Ascension Arena</div>
+          <div className="footer-brand">The World of Interstellar Seismic Tales</div>
           <div className="footer-copy">Community osu! tournament.<br />Name not yet confirmed. LAN confirmed for November 2026.</div>
         </div>
         <div>
@@ -390,7 +390,7 @@ export default async function Home() {
           </ul>
         </div>
         <div className="footer-osu-note">
-          <span>Ascension Arena is not affiliated with ppy Pty Ltd. osu! is a registered trademark of ppy Pty Ltd.</span>
+          <span>The World of Interstellar Seismic Tales is not affiliated with ppy Pty Ltd. osu! is a registered trademark of ppy Pty Ltd.</span>
           <span>Built by the community, for the community.</span>
         </div>
       </footer>
