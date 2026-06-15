@@ -59,7 +59,7 @@ export const authConfig: NextAuthConfig = {
 
     async signIn({ user, account, profile }) {
       if (account?.provider === "osu" && profile) {
-        const osuProfile = profile as OsuProfile;
+        const osuProfile = profile as unknown as OsuProfile;
         try {
           await prisma.user.update({
             where: { id: user.id },
