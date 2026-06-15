@@ -15,8 +15,9 @@ export async function POST() {
     );
   }
 
-  const registrationOpen = process.env.NEXT_PUBLIC_REGISTRATION_OPEN === "true";
-  if (!registrationOpen) {
+  // Registration is open when env var is "true" OR not set at all (default open)
+  const registrationClosed = process.env.NEXT_PUBLIC_REGISTRATION_OPEN === "false";
+  if (registrationClosed) {
     return NextResponse.json(
       { error: "Registration is not currently open." },
       { status: 403 }
