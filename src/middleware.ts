@@ -1,5 +1,5 @@
 // src/middleware.ts
-// Protects /admin/* and /api/admin/* from unauthenticated access.
+// Only protects /admin routes. Auth routes are handled by NextAuth directly.
 
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
@@ -8,13 +8,10 @@ import type { NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+  if (pathname.startsWith("/admin")) {
     const session = await auth();
     if (!session) {
-      if (pathname.startsWith("/admin")) {
-        return NextResponse.redirect(new URL("/login", request.url));
-      }
-      return NextResponse.json({ error: "Forbidden." }, { status: 401 });
+      return NextResponse.redirect(new URL("/", request.url));
     }
   }
 
@@ -22,5 +19,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*"],
 };

@@ -79,7 +79,7 @@ export const authConfig: NextAuthConfig = {
     },
   },
 
-  pages: { signIn: "/login", error: "/login" },
+  // NextAuth handles auth pages internally
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
