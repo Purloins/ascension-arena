@@ -233,20 +233,8 @@ enum Round {
   FINALS
 }
 
-enum ModSlot {
-  NM
-  HD
-  HR
-  DT
-  FM
-  RX
-  AP
-  EZ
-  EZHD
-  EZDT
-  HDDTHR
-  TB
-}
+// Mod is stored as a plain string so staff can freely assign any mod per map.
+// Valid values: NM HD HR DT FM RX AP EZ EZHD EZDT HDDTHR TB
 
 model Mappool {
   id        String   @id @default(cuid())
@@ -259,32 +247,35 @@ model Mappool {
 }
 
 model MappoolMap {
-  id         String  @id @default(cuid())
+  id         String @id @default(cuid())
   mappoolId  String
-  slot       ModSlot
-  slotIndex  Int     // e.g. NM1, NM2, NM3 → slotIndex 1,2,3
 
-  // osu! beatmap data (fetched from API on add)
+  // Slot label within the round: A1, A2 … A12 / B1 … etc.
+  // slotNumber is the numeric part (1–99), letter is derived from round.
+  slotNumber Int
+  mod        String  // NM | HD | HR | DT | FM | RX | AP | EZ | EZHD | EZDT | HDDTHR | TB
+
+  // osu! beatmap data
   beatmapId    Int
   beatmapsetId Int
   title        String
   artist       String
-  version      String  // difficulty name
+  version      String
   mapper       String
   coverUrl     String
 
-  // stats
-  starRating Float
-  bpm        Float
-  totalLength Int    // seconds
-  drainLength Int    // seconds
-  cs         Float
-  ar         Float
-  od         Float
-  hp         Float
+  // Stats
+  starRating  Float
+  bpm         Float
+  totalLength Int
+  drainLength Int
+  cs          Float
+  ar          Float
+  od          Float
+  hp          Float
 
   mappool Mappool @relation(fields: [mappoolId], references: [id], onDelete: Cascade)
 
-  @@unique([mappoolId, slot, slotIndex])
+  @@unique([mappoolId, slotNumber])
   @@index([mappoolId])
 }

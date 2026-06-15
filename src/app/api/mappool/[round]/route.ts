@@ -1,6 +1,5 @@
 // src/app/api/mappool/[round]/route.ts
-// GET /api/mappool/:round — public, returns the mappool for a given round
-// :round = qualifiers | quarterfinals | semifinals | finals
+// GET /api/mappool/:round — public, returns the visible mappool for a round.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -24,11 +23,7 @@ export async function GET(
 
   const mappool = await prisma.mappool.findUnique({
     where: { round },
-    include: {
-      maps: {
-        orderBy: [{ slot: "asc" }, { slotIndex: "asc" }],
-      },
-    },
+    include: { maps: { orderBy: { slotNumber: "asc" } } },
   });
 
   if (!mappool || !mappool.visible) {

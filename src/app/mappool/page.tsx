@@ -1,24 +1,22 @@
 // src/app/mappool/page.tsx
-// Public mappool viewer — shows all visible pools per round with tab navigation.
+// Public mappool viewer.
 
 import { prisma } from "@/lib/prisma";
 import MappoolViewer from "./MappoolViewer";
 
-export const revalidate = 60; // revalidate every 60s
+export const revalidate = 60;
 
 const ROUNDS = [
-  { key: "QUALIFIERS",    label: "Qualifiers" },
-  { key: "QUARTERFINALS", label: "Quarterfinals" },
-  { key: "SEMIFINALS",    label: "Semifinals" },
-  { key: "FINALS",        label: "Finals" },
+  { key: "QUALIFIERS",    label: "Qualifiers",    letter: "A" },
+  { key: "QUARTERFINALS", label: "Quarterfinals",  letter: "B" },
+  { key: "SEMIFINALS",    label: "Semifinals",     letter: "C" },
+  { key: "FINALS",        label: "Finals",         letter: "D" },
 ] as const;
 
 export default async function MappoolPage() {
   const pools = await prisma.mappool.findMany({
     where: { visible: true },
-    include: {
-      maps: { orderBy: [{ slot: "asc" }, { slotIndex: "asc" }] },
-    },
+    include: { maps: { orderBy: { slotNumber: "asc" } } },
   });
 
   const poolsByRound = Object.fromEntries(pools.map((p) => [p.round, p]));
@@ -41,10 +39,7 @@ export default async function MappoolPage() {
             padding: "48px 32px", textAlign: "center",
           }}>
             <div style={{ fontSize: "2rem", marginBottom: 12 }}>🔒</div>
-            <div style={{
-              fontFamily: "Cinzel, serif", fontSize: "0.85rem",
-              color: "var(--muted)", letterSpacing: "0.1em",
-            }}>
+            <div style={{ fontFamily: "Cinzel, serif", fontSize: "0.85rem", color: "var(--muted)", letterSpacing: "0.1em" }}>
               No mappools have been revealed yet.
             </div>
           </div>
