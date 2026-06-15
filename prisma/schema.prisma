@@ -221,3 +221,70 @@ model StaffMember {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// ─────────────────────────────────────────
+// Mappool
+// ─────────────────────────────────────────
+
+enum Round {
+  QUALIFIERS
+  QUARTERFINALS
+  SEMIFINALS
+  FINALS
+}
+
+enum ModSlot {
+  NM
+  HD
+  HR
+  DT
+  FM
+  RX
+  AP
+  EZ
+  EZHD
+  EZDT
+  HDDTHR
+  TB
+}
+
+model Mappool {
+  id        String   @id @default(cuid())
+  round     Round    @unique
+  visible   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  maps MappoolMap[]
+}
+
+model MappoolMap {
+  id         String  @id @default(cuid())
+  mappoolId  String
+  slot       ModSlot
+  slotIndex  Int     // e.g. NM1, NM2, NM3 → slotIndex 1,2,3
+
+  // osu! beatmap data (fetched from API on add)
+  beatmapId    Int
+  beatmapsetId Int
+  title        String
+  artist       String
+  version      String  // difficulty name
+  mapper       String
+  coverUrl     String
+
+  // stats
+  starRating Float
+  bpm        Float
+  totalLength Int    // seconds
+  drainLength Int    // seconds
+  cs         Float
+  ar         Float
+  od         Float
+  hp         Float
+
+  mappool Mappool @relation(fields: [mappoolId], references: [id], onDelete: Cascade)
+
+  @@unique([mappoolId, slot, slotIndex])
+  @@index([mappoolId])
+}

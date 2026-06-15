@@ -1,5 +1,5 @@
 // src/middleware.ts
-// Only protects /admin routes. Auth routes are handled by NextAuth directly.
+// Protects /admin/* routes — redirects to homepage if not logged in.
 
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";

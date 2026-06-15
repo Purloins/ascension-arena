@@ -32,6 +32,7 @@ export default async function Home() {
           <li><a href="#registration">Register</a></li>
           <li><a href="#elements">Elements</a></li>
           <li><a href="#targeting">Targeting</a></li>
+          <li><a href="/mappool">Mappool</a></li>
           <li><a href="#schedule">Schedule</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>
@@ -390,7 +391,8 @@ export default async function Home() {
             <li><a href="#">Home</a></li>
             <li><a href="#registration">Register</a></li>
             <li><a href="#elements">Elements &amp; Rules</a></li>
-            <li><a href="#schedule">Schedule</a></li>
+            <li><a href="/mappool">Mappool</a></li>
+          <li><a href="#schedule">Schedule</a></li>
             <li><a href="#faq">FAQ</a></li>
           </ul>
         </div>
