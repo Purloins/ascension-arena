@@ -38,6 +38,7 @@ export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
   providers: [osuProvider],
   session: { strategy: "database" },
+  trustHost: true,
 
   callbacks: {
     async session({ session, user }) {

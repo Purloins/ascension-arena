@@ -1,22 +1,8 @@
 // src/middleware.ts
-// Protects /admin/* routes — redirects to homepage if not logged in.
+// Protects /admin/* — redirects to / if not logged in.
+// NOTE: auth() in middleware requires AUTH_SECRET and AUTH_TRUST_HOST=true on Vercel.
 
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  if (pathname.startsWith("/admin")) {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
-  }
-
-  return NextResponse.next();
-}
+export { auth as middleware } from "@/lib/auth";
 
 export const config = {
   matcher: ["/admin/:path*"],

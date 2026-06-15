@@ -4,13 +4,11 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { NavAuth, HeroAuthButton, RegisterAction } from "@/components/AuthButtons";
+import { HeroAuthButton, RegisterAction } from "@/components/AuthButtons";
 
 export default async function Home() {
   const session = await auth();
   const loggedIn = !!session?.user;
-  const username = session?.user?.name ?? null;
-
   // Pull registration status if logged in
   let status: string | null = null;
   if (session?.user?.id) {
@@ -25,20 +23,6 @@ export default async function Home() {
 
   return (
     <>
-      {/* NAV */}
-      <nav>
-        <div className="logo">Ascension Arena</div>
-        <ul className="nav-links">
-          <li><a href="#registration">Register</a></li>
-          <li><a href="#elements">Elements</a></li>
-          <li><a href="#targeting">Targeting</a></li>
-          <li><a href="/mappool">Mappool</a></li>
-          <li><a href="#schedule">Schedule</a></li>
-          <li><a href="#faq">FAQ</a></li>
-        </ul>
-        <NavAuth loggedIn={loggedIn} username={username} />
-      </nav>
-
       {/* HERO */}
       <div className="hero">
         <div className="hero-left">
