@@ -1,0 +1,223 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────
+// NextAuth required tables
+// ─────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────
+// Core tournament models
+// ─────────────────────────────────────────
+
+enum Element {
+  SOULWEAVER
+  DEMIGOD
+  HUMAN
+  WITCH
+}
+
+enum RegistrationStatus {
+  PENDING
+  ACTIVE
+  TEAMED
+  WITHDRAWN
+}
+
+enum TeamStatus {
+  FORMING
+  LOCKED
+  ELIMINATED
+}
+
+enum RollStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  osuId         String?   @unique
+  osuUsername   String?
+  osuRank       Int?
+  osuCountry    String?
+  osuAvatar     String?
+
+  registrationStatus RegistrationStatus?
+  element            Element?
+  registeredAt       DateTime?
+
+  accounts        Account[]
+  sessions        Session[]
+  teamMemberships TeamMember[]
+  staffRole       StaffMember?
+}
+
+model Team {
+  id        String     @id @default(cuid())
+  name      String?
+  status    TeamStatus @default(FORMING)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  members TeamMember[]
+  matches Match[]      @relation("MatchTeams")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  userId    String
+  teamId    String
+  isCaptain Boolean  @default(false)
+  joinedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+}
+
+model ElementRoll {
+  id          String     @id @default(cuid())
+  status      RollStatus @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  seed        String?
+
+  results ElementRollResult[]
+}
+
+model ElementRollResult {
+  id          String   @id @default(cuid())
+  rollId      String
+  userId      String
+  element     Element
+  rolledAt    DateTime @default(now())
+  rolledOrder Int
+
+  roll ElementRoll @relation(fields: [rollId], references: [id], onDelete: Cascade)
+
+  @@unique([rollId, userId])
+}
+
+enum MatchStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Match {
+  id          String      @id @default(cuid())
+  status      MatchStatus @default(SCHEDULED)
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  round       String?
+  osuLobbyId  String?
+
+  teams Team[]    @relation("MatchTeams")
+  picks MapPick[]
+}
+
+model MapPick {
+  id        String  @id @default(cuid())
+  matchId   String
+  pickOrder Int
+  beatmapId String
+  mod       String?
+  pickedBy  String?
+
+  match  Match         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  scores PlayerScore[]
+}
+
+model PlayerScore {
+  id        String  @id @default(cuid())
+  mapPickId String
+  userId    String
+  score     Int
+  accuracy  Float?
+  mods      String?
+  passed    Boolean @default(true)
+
+  targetedUserId String?
+  targetBonus    Float?
+  adjustedScore  Int?
+
+  hpBefore Int?
+  hpAfter  Int?
+  hpDamage Int?
+
+  mapPick MapPick @relation(fields: [mapPickId], references: [id], onDelete: Cascade)
+}
+
+enum StaffRole {
+  HOST
+  MAPPOOLER
+  REFEREE
+  STREAMER
+  COMMENTATOR
+  DESIGNER
+  DEVELOPER
+}
+
+model StaffMember {
+  id     String    @id @default(cuid())
+  userId String    @unique
+  role   StaffRole
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
