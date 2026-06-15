@@ -1,10 +1,8 @@
 "use client";
 // src/app/admin/mappool/page.tsx
-// Staff mappool builder — grid of slots (A1–A12 etc.), each with ID input + mod selector.
+// Staff mappool builder — auto-saves 800ms after you stop typing.
 
-import { useState, useEffect, useCallback } from "react";
-
-// ── Constants ─────────────────────────────
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const ROUNDS = [
   { key: "qualifiers",    label: "Qualifiers",    letter: "A" },
@@ -20,8 +18,6 @@ const MOD_COLORS: Record<string, string> = {
   FM:"#34d399", RX:"#f472b6", AP:"#c084fc", EZ:"#86efac",
   EZHD:"#fde68a", EZDT:"#93c5fd", HDDTHR:"#fb923c", TB:"#e2e8f0",
 };
-
-// ── Types ─────────────────────────────────
 
 interface MappoolMap {
   id: string;
@@ -46,16 +42,37 @@ interface Mappool {
   maps: MappoolMap[];
 }
 
-// State per slot in the editor
+// Save state per slot
+type SaveState = "idle" | "typing" | "saving" | "saved" | "error";
+
 interface SlotState {
-  input: string;   // beatmap ID or URL being typed
-  mod: string;     // selected mod
-  loading: boolean;
-  error: string | null;
+  input: string;
+  mod: string;
+  saveState: SaveState;
+  errorMsg: string | null;
 }
 
 function formatTime(s: number) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+}
+
+// ── SaveIndicator ─────────────────────────
+
+function SaveIndicator({ state, error }: { state: SaveState; error: string | null }) {
+  if (state === "idle") return null;
+  const configs: Record<SaveState, { color: string; label: string }> = {
+    idle:   { color: "var(--muted)", label: "" },
+    typing: { color: "var(--muted)", label: "Waiting…" },
+    saving: { color: "#60a5fa", label: "Fetching from osu!…" },
+    saved:  { color: "#34d399", label: "✓ Saved" },
+    error:  { color: "#f87171", label: error ?? "Error" },
+  };
+  const { color, label } = configs[state];
+  return (
+    <div style={{ fontSize: "0.72rem", color, marginTop: 4, minHeight: 18 }}>
+      {label}
+    </div>
+  );
 }
 
 // ── Main page ─────────────────────────────
@@ -64,20 +81,18 @@ export default function AdminMappoolPage() {
   const [activeRound, setActiveRound] = useState(ROUNDS[0]);
   const [mappool, setMappool] = useState<Mappool | null>(null);
   const [loading, setLoading] = useState(false);
-  const [globalError, setGlobalError] = useState<string | null>(null);
-  const [globalSuccess, setGlobalSuccess] = useState<string | null>(null);
-
-  // How many slots to show — staff can add more
+  const [globalMsg, setGlobalMsg] = useState<{ text: string; type: "ok" | "err" } | null>(null);
   const [slotCount, setSlotCount] = useState(12);
-
-  // Per-slot editor state
   const [slots, setSlots] = useState<Record<number, SlotState>>({});
 
+  // Debounce timers per slot
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
   function getSlot(n: number): SlotState {
-    return slots[n] ?? { input: "", mod: "NM", loading: false, error: null };
+    return slots[n] ?? { input: "", mod: "NM", saveState: "idle", errorMsg: null };
   }
 
-  function setSlot(n: number, patch: Partial<SlotState>) {
+  function patchSlot(n: number, patch: Partial<SlotState>) {
     setSlots((prev) => ({ ...prev, [n]: { ...getSlot(n), ...patch } }));
   }
 
@@ -85,57 +100,75 @@ export default function AdminMappoolPage() {
 
   const fetchPool = useCallback(async () => {
     setLoading(true);
-    setGlobalError(null);
     try {
       const res = await fetch(`/api/admin/mappool/${activeRound.key}`);
-      if (!res.ok) {
-        const d = await res.json();
-        setGlobalError(d.error ?? "Failed to load.");
-        return;
-      }
+      if (!res.ok) { const d = await res.json(); setGlobalMsg({ text: d.error ?? "Failed.", type: "err" }); return; }
       const data = await res.json();
       setMappool(data.mappool);
-      // Ensure slotCount covers all existing maps
       const maxSlot = Math.max(0, ...data.mappool.maps.map((m: MappoolMap) => m.slotNumber));
-      if (maxSlot >= slotCount) setSlotCount(maxSlot + 1);
-    } catch { setGlobalError("Network error."); }
+      if (maxSlot >= slotCount) setSlotCount(maxSlot + 4);
+    } catch { setGlobalMsg({ text: "Network error.", type: "err" }); }
     finally { setLoading(false); }
-  }, [activeRound, slotCount]);
-
-  useEffect(() => {
-    setSlots({});
-    fetchPool();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRound]);
 
-  // ── Save a slot ────────────────────────
+  useEffect(() => {
+    setSlots({});
+    // Clear all pending timers on round change
+    Object.values(timers.current).forEach(clearTimeout);
+    timers.current = {};
+    fetchPool();
+  }, [fetchPool]);
 
-  async function saveSlot(n: number) {
-    const s = getSlot(n);
-    if (!s.input.trim()) return;
-    setSlot(n, { loading: true, error: null });
-    setGlobalSuccess(null);
+  // ── Auto-save a slot ───────────────────
+
+  async function saveSlot(n: number, input: string, mod: string) {
+    if (!input.trim()) return;
+    patchSlot(n, { saveState: "saving" });
 
     try {
       const res = await fetch(`/api/admin/mappool/${activeRound.key}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          beatmapInput: s.input.trim(),
-          slotNumber: n,
-          mod: s.mod,
-        }),
+        body: JSON.stringify({ beatmapInput: input.trim(), slotNumber: n, mod }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setSlot(n, { loading: false, error: data.error ?? "Failed." });
+        patchSlot(n, { saveState: "error", errorMsg: data.error ?? "Failed." });
         return;
       }
-      setSlot(n, { loading: false, input: "", error: null });
-      setGlobalSuccess(`${activeRound.letter}${n} saved — ${data.map.artist} — ${data.map.title}`);
+      patchSlot(n, { saveState: "saved", input: "", errorMsg: null });
+      // Reset to idle after 2s
+      setTimeout(() => patchSlot(n, { saveState: "idle" }), 2000);
       fetchPool();
     } catch {
-      setSlot(n, { loading: false, error: "Network error." });
+      patchSlot(n, { saveState: "error", errorMsg: "Network error." });
+    }
+  }
+
+  // Debounced input handler
+  function handleInput(n: number, value: string) {
+    const current = getSlot(n);
+    patchSlot(n, { input: value, saveState: value.trim() ? "typing" : "idle" });
+
+    // Clear existing timer
+    if (timers.current[n]) clearTimeout(timers.current[n]);
+    if (!value.trim()) return;
+
+    // Set new timer — fire 800ms after user stops typing
+    timers.current[n] = setTimeout(() => {
+      const mod = getSlot(n).mod || current.mod;
+      saveSlot(n, value, mod);
+    }, 800);
+  }
+
+  // Mod change — if there's already a saved map, immediately re-save with new mod
+  async function handleModChange(n: number, mod: string) {
+    patchSlot(n, { mod });
+    const existing = mapBySlot[n];
+    if (existing) {
+      // Re-save with existing beatmap ID and new mod
+      await saveSlot(n, String(existing.beatmapId), mod);
     }
   }
 
@@ -143,17 +176,18 @@ export default function AdminMappoolPage() {
 
   async function clearSlot(n: number) {
     if (!confirm(`Clear slot ${activeRound.letter}${n}?`)) return;
-    setGlobalSuccess(null); setGlobalError(null);
+    setGlobalMsg(null);
     try {
       const res = await fetch(`/api/admin/mappool/${activeRound.key}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slotNumber: n }),
       });
-      if (!res.ok) { const d = await res.json(); setGlobalError(d.error ?? "Failed."); return; }
-      setGlobalSuccess(`${activeRound.letter}${n} cleared.`);
+      if (!res.ok) { const d = await res.json(); setGlobalMsg({ text: d.error ?? "Failed.", type: "err" }); return; }
+      patchSlot(n, { input: "", saveState: "idle", errorMsg: null });
+      setGlobalMsg({ text: `${activeRound.letter}${n} cleared.`, type: "ok" });
       fetchPool();
-    } catch { setGlobalError("Network error."); }
+    } catch { setGlobalMsg({ text: "Network error.", type: "err" }); }
   }
 
   // ── Toggle visibility ──────────────────
@@ -167,30 +201,25 @@ export default function AdminMappoolPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ visible: next }),
       });
-      if (!res.ok) { const d = await res.json(); setGlobalError(d.error ?? "Failed."); return; }
+      if (!res.ok) { const d = await res.json(); setGlobalMsg({ text: d.error ?? "Failed.", type: "err" }); return; }
       setMappool((p) => p ? { ...p, visible: next } : p);
-      setGlobalSuccess(next ? "Pool is now public." : "Pool hidden from players.");
-    } catch { setGlobalError("Network error."); }
+      setGlobalMsg({ text: next ? "Pool is now public." : "Pool hidden.", type: "ok" });
+    } catch { setGlobalMsg({ text: "Network error.", type: "err" }); }
   }
 
-  // ── Build map lookup ───────────────────
   const mapBySlot: Record<number, MappoolMap> = {};
   mappool?.maps.forEach((m) => { mapBySlot[m.slotNumber] = m; });
 
-  // ── Styles ─────────────────────────────
   const inputStyle: React.CSSProperties = {
     background: "var(--raised)", border: "1px solid var(--border)",
     color: "var(--text)", padding: "8px 12px", fontSize: "0.82rem",
     outline: "none", width: "100%", fontFamily: "inherit",
-  };
-  const selectStyle: React.CSSProperties = {
-    ...inputStyle, cursor: "pointer", width: "auto",
+    transition: "border-color 0.2s",
   };
 
   return (
     <div style={{ paddingTop: 56, minHeight: "100vh" }}>
 
-      {/* Header */}
       <div className="page-section" style={{ paddingBottom: 0 }}>
         <div className="eyebrow">Staff</div>
         <h2 className="section-title">Mappool Builder</h2>
@@ -218,17 +247,17 @@ export default function AdminMappoolPage() {
 
       <div className="page-section" style={{ paddingTop: 28 }}>
 
-        {/* Status messages */}
-        {globalError && (
-          <div style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", padding: "12px 16px", marginBottom: 20, color: "#f87171", fontSize: "0.88rem", display: "flex", justifyContent: "space-between" }}>
-            {globalError}
-            <button onClick={() => setGlobalError(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer" }}>✕</button>
-          </div>
-        )}
-        {globalSuccess && (
-          <div style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", padding: "12px 16px", marginBottom: 20, color: "#34d399", fontSize: "0.88rem", display: "flex", justifyContent: "space-between" }}>
-            {globalSuccess}
-            <button onClick={() => setGlobalSuccess(null)} style={{ background: "none", border: "none", color: "#34d399", cursor: "pointer" }}>✕</button>
+        {/* Global message */}
+        {globalMsg && (
+          <div style={{
+            background: globalMsg.type === "ok" ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+            border: `1px solid ${globalMsg.type === "ok" ? "rgba(52,211,153,0.3)" : "rgba(248,113,113,0.3)"}`,
+            color: globalMsg.type === "ok" ? "#34d399" : "#f87171",
+            padding: "12px 16px", marginBottom: 20, fontSize: "0.88rem",
+            display: "flex", justifyContent: "space-between",
+          }}>
+            {globalMsg.text}
+            <button onClick={() => setGlobalMsg(null)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer" }}>✕</button>
           </div>
         )}
 
@@ -239,16 +268,11 @@ export default function AdminMappoolPage() {
           padding: "14px 20px", marginBottom: 28,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: mappool?.visible ? "#34d399" : "var(--border)",
-            }} />
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: mappool?.visible ? "#34d399" : "var(--border)" }} />
             <span style={{ fontFamily: "Cinzel, serif", fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.2em", color: mappool?.visible ? "#34d399" : "var(--muted)" }}>
               {mappool?.visible ? "Public — players can see this pool" : "Hidden from players"}
             </span>
-            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
-              · {mappool?.maps.length ?? 0} maps
-            </span>
+            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>· {mappool?.maps.length ?? 0} maps</span>
           </div>
           <button onClick={toggleVisibility} style={{
             fontFamily: "Cinzel, serif", fontSize: "0.6rem", fontWeight: 700,
@@ -269,36 +293,34 @@ export default function AdminMappoolPage() {
           </div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
               {Array.from({ length: slotCount }, (_, i) => i + 1).map((n) => {
                 const existing = mapBySlot[n];
-                const slotState = getSlot(n);
+                const s = getSlot(n);
                 const slotLabel = `${activeRound.letter}${n}`;
                 const modColor = existing ? (MOD_COLORS[existing.mod] ?? "#a78bfa") : "var(--border)";
+
+                // Border colour reacts to save state
+                const borderColor = s.saveState === "saving" ? "#60a5fa"
+                  : s.saveState === "saved" ? "#34d399"
+                  : s.saveState === "error" ? "#f87171"
+                  : s.saveState === "typing" ? "var(--violet-l)"
+                  : existing ? modColor + "55" : "var(--border)";
 
                 return (
                   <div key={n} style={{
                     background: "var(--surface)",
-                    border: `1px solid ${existing ? modColor + "55" : "var(--border)"}`,
-                    borderTop: `2px solid ${existing ? modColor : "var(--border)"}`,
+                    border: `1px solid ${borderColor}`,
+                    borderTop: `2px solid ${existing ? modColor : s.saveState === "typing" ? "var(--violet-l)" : "var(--border)"}`,
                     padding: 16,
-                    transition: "border-color 0.2s",
+                    transition: "border-color 0.25s",
                   }}>
-                    {/* Slot header */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                      <span style={{
-                        fontFamily: "Cinzel, serif", fontSize: "0.7rem", fontWeight: 700,
-                        letterSpacing: "0.15em",
-                        color: existing ? modColor : "var(--muted)",
-                      }}>
+                    {/* Slot label + clear */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <span style={{ fontFamily: "Cinzel, serif", fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.15em", color: existing ? modColor : "var(--muted)" }}>
                         {slotLabel}
                         {existing && (
-                          <span style={{
-                            marginLeft: 8, fontSize: "0.6rem",
-                            background: modColor,
-                            color: "#0a0816",
-                            padding: "1px 6px",
-                          }}>
+                          <span style={{ marginLeft: 8, fontSize: "0.58rem", background: modColor, color: "#0a0816", padding: "1px 6px" }}>
                             {existing.mod}
                           </span>
                         )}
@@ -307,95 +329,69 @@ export default function AdminMappoolPage() {
                         <button onClick={() => clearSlot(n)} style={{
                           background: "none", border: "1px solid rgba(248,113,113,0.3)",
                           color: "#f87171", fontSize: "0.58rem", fontFamily: "Cinzel, serif",
-                          fontWeight: 700, letterSpacing: "0.15em", padding: "3px 8px",
-                          cursor: "pointer",
+                          fontWeight: 700, letterSpacing: "0.15em", padding: "3px 8px", cursor: "pointer",
                         }}>
                           Clear
                         </button>
                       )}
                     </div>
 
-                    {/* Existing map preview */}
+                    {/* Existing map info */}
                     {existing && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                          <img
-                            src={existing.coverUrl} alt=""
-                            style={{ width: 60, height: 40, objectFit: "cover", opacity: 0.85, flexShrink: 0 }}
-                          />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: "0.82rem", color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {existing.artist} — {existing.title}
-                            </div>
-                            <div style={{ fontSize: "0.72rem", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              [{existing.version}] · {existing.mapper}
-                            </div>
-                            <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 4 }}>
-                              ★{existing.starRating.toFixed(2)} · {existing.bpm.toFixed(0)}bpm · {formatTime(existing.drainLength)} · CS{existing.cs.toFixed(1)} AR{existing.ar.toFixed(1)} OD{existing.od.toFixed(1)} HP{existing.hp.toFixed(1)}
-                            </div>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                        <img src={existing.coverUrl} alt="" style={{ width: 60, height: 38, objectFit: "cover", opacity: 0.85, flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "0.82rem", color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {existing.artist} — {existing.title}
+                          </div>
+                          <div style={{ fontSize: "0.7rem", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            [{existing.version}] · {existing.mapper}
+                          </div>
+                          <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: 2 }}>
+                            ★{existing.starRating.toFixed(2)} · {existing.bpm.toFixed(0)}bpm · {formatTime(existing.drainLength)} · CS{existing.cs.toFixed(1)} AR{existing.ar.toFixed(1)} OD{existing.od.toFixed(1)} HP{existing.hp.toFixed(1)}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Input row — always visible so staff can replace */}
-                    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexDirection: "column" }}>
-                      <input
-                        style={inputStyle}
-                        placeholder={existing ? "Paste new ID to replace…" : "Beatmap ID or URL"}
-                        value={slotState.input}
-                        onChange={(e) => setSlot(n, { input: e.target.value })}
-                        onKeyDown={(e) => e.key === "Enter" && saveSlot(n)}
-                      />
-                      <div style={{ display: "flex", gap: 8, width: "100%", alignItems: "center" }}>
-                        <select
-                          style={{ ...selectStyle, flex: 1 }}
-                          value={slotState.mod}
-                          onChange={(e) => setSlot(n, { mod: e.target.value })}
-                        >
-                          {MODS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => saveSlot(n)}
-                          disabled={slotState.loading || !slotState.input.trim()}
-                          style={{
-                            fontFamily: "Cinzel, serif", fontSize: "0.6rem", fontWeight: 700,
-                            letterSpacing: "0.15em", textTransform: "uppercase",
-                            background: slotState.loading || !slotState.input.trim()
-                              ? "var(--border)" : "linear-gradient(135deg, var(--osu), #a855f7)",
-                            color: "#fff", border: "none", padding: "8px 16px",
-                            cursor: slotState.loading || !slotState.input.trim() ? "not-allowed" : "pointer",
-                            opacity: slotState.loading || !slotState.input.trim() ? 0.5 : 1,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {slotState.loading ? "…" : existing ? "Replace" : "Save"}
-                        </button>
-                      </div>
-                      {slotState.error && (
-                        <div style={{ fontSize: "0.75rem", color: "#f87171" }}>
-                          {slotState.error}
-                        </div>
-                      )}
+                    {/* Input + mod row */}
+                    <input
+                      style={{
+                        ...inputStyle,
+                        borderColor: s.saveState === "typing" ? "var(--violet-l)"
+                          : s.saveState === "error" ? "#f87171"
+                          : "var(--border)",
+                        marginBottom: 8,
+                      }}
+                      placeholder={existing ? "Paste new ID to replace…" : "Beatmap ID or URL"}
+                      value={s.input}
+                      onChange={(e) => handleInput(n, e.target.value)}
+                    />
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select
+                        style={{
+                          ...inputStyle, width: "auto", flex: 1, cursor: "pointer",
+                          borderColor: "var(--border)",
+                        }}
+                        value={s.mod}
+                        onChange={(e) => handleModChange(n, e.target.value)}
+                      >
+                        {MODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <SaveIndicator state={s.saveState} error={s.errorMsg} />
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Add more slots button */}
             <div style={{ textAlign: "center", marginTop: 20 }}>
-              <button
-                onClick={() => setSlotCount((c) => c + 4)}
-                style={{
-                  fontFamily: "Cinzel, serif", fontSize: "0.62rem", fontWeight: 700,
-                  letterSpacing: "0.2em", textTransform: "uppercase",
-                  background: "transparent", border: "1px solid var(--border)",
-                  color: "var(--muted)", padding: "10px 24px", cursor: "pointer",
-                }}
-              >
+              <button onClick={() => setSlotCount((c) => c + 4)} style={{
+                fontFamily: "Cinzel, serif", fontSize: "0.62rem", fontWeight: 700,
+                letterSpacing: "0.2em", textTransform: "uppercase",
+                background: "transparent", border: "1px solid var(--border)",
+                color: "var(--muted)", padding: "10px 24px", cursor: "pointer",
+              }}>
                 + Add more slots
               </button>
             </div>

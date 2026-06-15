@@ -440,3 +440,9 @@ footer {
 @media (max-width: 900px) {
   .sched-layout { grid-template-columns: 1fr !important; gap: 24px !important; }
 }
+
+/* Dropdown animation */
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
